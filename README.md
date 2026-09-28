@@ -246,6 +246,47 @@ Reads retry twice on a network error, a 5xx or a 429, half a second apart.
 That is deliberately few: a start that waits half a minute on a server
 that is down is worse than one that carries on.
 
+## The firewall in front of the site
+
+*Found 2026-09-28, running the first real sign-in against the test site.*
+
+**SiteGround's firewall refuses the first TLS handshake that .NET's managed
+HTTP handler makes in a process.** It answers with an HTML 403 page. Later
+connections resume the TLS session and pass.
+
+- This is deterministic: request 1 is refused, requests 2 and 3 get through.
+- Windows' WinHTTP and Android's native handler are never refused.
+- Link's notes describe the same host fingerprinting TLS.
+
+Three things follow:
+
+- **A 403 whose body is not JSON is the firewall, and it is retried.** It
+  is retried twice, for any request, including an exchange: the request
+  never reached WordPress, so no code was spent. A JSON 403 is the plugin
+  refusing and is never retried. This is integrity-sharp's rule for the
+  same host.
+- **Every request asks for its connection to be closed.** Otherwise the
+  retry goes over the pooled connection the firewall just refused, and is
+  refused again. A new connection resumes the session. Freedom makes a
+  handful of requests per start, so keep-alive buys nothing worth that.
+- **On Android, `UseFreedom` sends through `AndroidMessageHandler`**, the
+  platform's own stack, as Link does.
+
+Every request also carries a `User-Agent`
+(`Freedom.Client/0.1.0 (register; …)`, or the app's own name first under
+`UseFreedom`). .NET sends none of its own, and an access log should say
+whose traffic this is.
+
+**The same proxy drops `If-None-Match`.** The right ETag sent back as a
+header still got a 200, so the manifest request sends the ETag as
+`?etag=` as well, and the plugin accepts either.
+
+**The library's JSON is source-generated.** It therefore works where
+reflection-based serialization is switched off: trimmed and AOT builds,
+and .NET 10's file-based apps, where the first request used to throw.
+`FreedomStateJson` gives stores one shared, generated way to write a
+snapshot and credentials down.
+
 ## Only a refusal clears anything
 
 **A refusal clears the store and the credentials**, and `ConfigChanged`

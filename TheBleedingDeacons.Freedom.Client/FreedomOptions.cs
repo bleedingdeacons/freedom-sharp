@@ -37,6 +37,13 @@ public sealed record FreedomOptions
 	/// </summary>
 	public bool ClearOnRefusal { get; init; } = true;
 
+	/// <summary>
+	/// Gets the <c>User-Agent</c> every request carries. Null for
+	/// <see cref="FreedomApi.DefaultUserAgent"/>. Something is always sent: the
+	/// site's firewall refuses a .NET request without one.
+	/// </summary>
+	public string? UserAgent { get; init; }
+
 	/// <summary>Gets a value indicating whether these options are complete enough to talk to a server.</summary>
 	public bool IsConfigured => IsAllowedBaseUrl(BaseUrl, AllowInsecureBaseUrl) && !string.IsNullOrWhiteSpace(Application);
 

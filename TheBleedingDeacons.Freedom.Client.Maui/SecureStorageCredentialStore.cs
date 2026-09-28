@@ -1,8 +1,8 @@
 // Copyright (c) The Bleeding Deacons. Licensed under the MIT license.
 
-using System.Text.Json;
 using Microsoft.Maui.Storage;
 using TheBleedingDeacons.Freedom.Client.Abstractions;
+using TheBleedingDeacons.Freedom.Client.Serialization;
 
 namespace TheBleedingDeacons.Freedom.Client.Maui;
 
@@ -28,11 +28,9 @@ public sealed class SecureStorageCredentialStore(string application) : IFreedomC
 	{
 		try
 		{
-			var json = await SecureStorage.Default.GetAsync(_key).ConfigureAwait(false);
-
-			return string.IsNullOrEmpty(json) ? null : JsonSerializer.Deserialize<TabletCredentials>(json);
+			return FreedomStateJson.DeserializeCredentials(await SecureStorage.Default.GetAsync(_key).ConfigureAwait(false));
 		}
-		catch (Exception e) when (e is JsonException or InvalidOperationException or Java.Lang.Exception)
+		catch (Exception e) when (e is InvalidOperationException or Java.Lang.Exception)
 		{
 			return null;
 		}
@@ -40,7 +38,7 @@ public sealed class SecureStorageCredentialStore(string application) : IFreedomC
 
 	/// <inheritdoc/>
 	public Task SaveAsync(TabletCredentials credentials, CancellationToken cancellationToken) =>
-		SecureStorage.Default.SetAsync(_key, JsonSerializer.Serialize(credentials));
+		SecureStorage.Default.SetAsync(_key, FreedomStateJson.Serialize(credentials));
 
 	/// <inheritdoc/>
 	public Task ClearAsync(CancellationToken cancellationToken)

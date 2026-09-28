@@ -13,5 +13,5 @@ public sealed class JsonElementBox
 {
 	/// <summary>Gets the fields the server sent.</summary>
 	[JsonExtensionData]
-	public Dictionary<string, JsonElement> Fields { get; init; } = [];
+	public Dictionary<string, JsonElement> Fields { get; set; } = [];
 }
