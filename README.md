@@ -367,8 +367,10 @@ Releases are integrity-sharp's:
 - The tag runs `release.yml`, which re-runs the gates and publishes
   **Freedom.Client** and **Freedom.Client.Maui** to GitHub Packages and a
   GitHub Release.
-- It needs a `PACKAGES_TOKEN` secret: a classic PAT with `repo` and
-  `write:packages`. The organisation makes `GITHUB_TOKEN` read-only.
+- It publishes with the workflow's own `GITHUB_TOKEN`, which asks for
+  `packages: write` and `contents: write`, so there is no PAT to keep
+  alive. integrity-sharp still uses a `PACKAGES_TOKEN` secret; that
+  arrangement predates this one.
 
 To install, add the GitHub Packages feed to `nuget.config` with a token
 that has `read:packages`, then reference `Freedom.Client.Maui` (it brings

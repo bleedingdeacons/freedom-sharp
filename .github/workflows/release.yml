@@ -10,8 +10,14 @@ on:
     tags:
       - 'v*'
 
+# Write access asked for here rather than a PAT. The organisation's default
+# token is read-only, but a workflow may ask for more, and Fellowship's release
+# job does exactly that. GitHub Packages accepts GITHUB_TOKEN with
+# packages: write for a package owned by this repository, so freedom-sharp needs
+# no PACKAGES_TOKEN secret — integrity-sharp's arrangement predates this.
 permissions:
-  contents: read # enough for checkout; publishing does not use this token
+  contents: write   # the GitHub Release
+  packages: write   # the NuGet push
 
 jobs:
   release:
@@ -35,25 +41,6 @@ jobs:
           case "$VERSION" in
             *-*) echo "prerelease=true"  >> "$GITHUB_OUTPUT" ;;
             *)   echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
-          esac
-
-      # The org makes GITHUB_TOKEN read-only, so publishing needs a PAT. Checked
-      # up front so a missing or expired one fails in seconds, not after a build.
-      - name: Check publishing credentials
-        env:
-          PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
-        run: |
-          if [ -z "$PACKAGES_TOKEN" ]; then
-            echo "::error::Secret PACKAGES_TOKEN is not set. Create a classic PAT with the 'repo' and 'write:packages' scopes and add it as a repository secret named PACKAGES_TOKEN."
-            exit 1
-          fi
-          code=$(curl -sS -o /dev/null -w '%{http_code}' \
-            -u "${{ github.repository_owner }}:$PACKAGES_TOKEN" \
-            https://nuget.pkg.github.com/${{ github.repository_owner }}/download/freedom.client/index.json)
-          case "$code" in
-            200|404) echo "PACKAGES_TOKEN authenticates OK (HTTP $code)" ;;
-            401|403) echo "::error::PACKAGES_TOKEN was rejected (HTTP $code) — expired, revoked, or missing the write:packages scope."; exit 1 ;;
-            *) echo "::warning::Unexpected HTTP $code probing GitHub Packages; continuing and letting the push report the outcome." ;;
           esac
 
       - name: Setup Java
@@ -92,12 +79,12 @@ jobs:
         run: >
           dotnet nuget push "artifacts/*.nupkg"
           --source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
-          --api-key ${{ secrets.PACKAGES_TOKEN }}
+          --api-key ${{ secrets.GITHUB_TOKEN }}
           --skip-duplicate
 
       - name: Create GitHub Release
         env:
-          GH_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: >
           gh release create "$GITHUB_REF_NAME"
           artifacts/*.nupkg
