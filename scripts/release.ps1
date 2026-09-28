@@ -133,7 +133,11 @@ try {
         Write-Host "Committed release: v$Version" -ForegroundColor Green
     }
 
-    Invoke-Git tag -a $tag -m "Freedom.Client $Version" | Out-Null
+    # '-a' quoted: bare, PowerShell reads it as an abbreviation of
+    # Invoke-Git's own -Arguments parameter and the call fails with "A
+    # positional parameter cannot be found that accepts argument 'tag'".
+    # That is how v0.1.0 ended up tagged by hand.
+    Invoke-Git tag '-a' $tag '-m' "Freedom.Client $Version" | Out-Null
     Write-Host "Tagged $tag" -ForegroundColor Green
 
     # Push the branch first: if the tag landed alone, the release workflow would
