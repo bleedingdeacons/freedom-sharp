@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Shipped inside the Freedom.Client package rather than as one of its
+         own; see the IncludeModelsAssemblyInPackage target there. -->
+    <IsPackable>false</IsPackable>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,71 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Plural, with one entry, on purpose. With the singular property the
+         pack ran no inner build, the IncludeModelsAssemblyInPackage target
+         below found ReferenceCopyLocalPaths empty, and the .nupkg shipped
+         without Models — restoring cleanly and failing with
+         TypeLoadException at runtime. Checked by unzipping the package. -->
+    <TargetFrameworks>net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <!-- Package Info -->
+    <PackageId>Freedom.Client</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>The Bleeding Deacons</Authors>
+    <Company>The Bleeding Deacons</Company>
+    <Product>Freedom Client</Product>
+    <Description>Zero-configuration settings for .NET apps: sign a device in with Google through the Freedom WordPress plugin, then fetch only the configuration values that changed on every start, secrets sealed to the device's own key.</Description>
+    <PackageTags>wordpress;configuration;secrets;maui;freedom</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/bleedingdeacons/freedom-sharp</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/bleedingdeacons/freedom-sharp</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+
+    <!-- Build Settings -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <Copyright>Don't take yourself too damn seriously</Copyright>
+
+    <!-- As integrity-sharp: PDBs inside the assembly plus Source Link, so the
+         one .nupkg is debuggable without a symbol server. -->
+    <DebugType>embedded</DebugType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TheBleedingDeacons.Freedom.Tests" />
+  </ItemGroup>
+
+  <!-- Models ships inside this package, as integrity-sharp's does: its types
+       are in this library's public API, so the assembly has to be in the
+       .nupkg, and PrivateAssets="all" stops NuGet recording a dependency on
+       a Freedom.Models package that will never exist. Projects in this repo
+       that reference Client therefore reference Models as well. -->
+  <ItemGroup>
+    <ProjectReference Include="..\TheBleedingDeacons.Freedom.Models\TheBleedingDeacons.Freedom.Models.csproj" PrivateAssets="all" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);IncludeModelsAssemblyInPackage</TargetsForTfmSpecificBuildOutput>
+  </PropertyGroup>
+
+  <Target Name="IncludeModelsAssemblyInPackage">
+    <ItemGroup>
+      <BuildOutputInPackage Include="@(ReferenceCopyLocalPaths)"
+                            Condition="'%(ReferenceCopyLocalPaths.NuGetPackageId)' == '' AND '%(Filename)' == 'TheBleedingDeacons.Freedom.Models'" />
+    </ItemGroup>
+  </Target>
+
+</Project>

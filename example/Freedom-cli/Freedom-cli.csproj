@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The proof that Freedom.Client stands on its own: a console app that
+    signs in through a loopback listener, keeps its configuration in a file,
+    and references nothing of this suite's but the client.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>FreedomCli</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- Models is referenced explicitly because the client marks its own
+       reference PrivateAssets="all" (Models ships inside Freedom.Client's
+       package). A consumer of the package needs neither. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\TheBleedingDeacons.Freedom.Client\TheBleedingDeacons.Freedom.Client.csproj" />
+    <ProjectReference Include="..\..\TheBleedingDeacons.Freedom.Models\TheBleedingDeacons.Freedom.Models.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.11" />
+  </ItemGroup>
+
+</Project>

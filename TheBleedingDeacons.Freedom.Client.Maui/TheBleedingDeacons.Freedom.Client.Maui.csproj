@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The MAUI half of Freedom: working defaults for every seam Freedom.Client
+    leaves open, so an Android app needs nothing but options and a callback
+    activity. Android only for now — the device identity is ANDROID_ID, and
+    what an iOS or Windows device should be identified by is still an open
+    question (see the README's "What is not done").
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <UseMaui>true</UseMaui>
+    <SingleProject>true</SingleProject>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <SupportedOSPlatformVersion>24.0</SupportedOSPlatformVersion>
+
+    <PackageId>Freedom.Client.Maui</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>The Bleeding Deacons</Authors>
+    <Company>The Bleeding Deacons</Company>
+    <Product>Freedom Client for .NET MAUI</Product>
+    <Description>MAUI defaults for Freedom.Client: WebAuthenticator sign-in, ANDROID_ID device identity, SecureStorage for credentials and configuration, and builder.UseFreedom().</Description>
+    <PackageTags>maui;android;configuration;secrets;freedom</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/bleedingdeacons/freedom-sharp</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/bleedingdeacons/freedom-sharp</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Copyright>Don't take yourself too damn seriously</Copyright>
+    <DebugType>embedded</DebugType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.90" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TheBleedingDeacons.Freedom.Client\TheBleedingDeacons.Freedom.Client.csproj" />
+    <ProjectReference Include="..\TheBleedingDeacons.Freedom.Models\TheBleedingDeacons.Freedom.Models.csproj" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>
