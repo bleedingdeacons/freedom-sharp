@@ -483,3 +483,6 @@ $RECYCLE.BIN/
 
 # The example CLI keeps its sign-in and configuration here, in plain text.
 .freedom/
+
+# Reqnroll generates these on every build from the .feature files.
+*.feature.cs

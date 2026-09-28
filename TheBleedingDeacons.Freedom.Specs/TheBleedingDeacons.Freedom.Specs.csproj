@@ -1,0 +1,65 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!--
+		The executable specification for Freedom's client.
+
+		Link's arrangement: Reqnroll over xUnit v3, with Shouldly. The feature
+		files are the readable half — what a device does on every start, what
+		it keeps and what it lets go of — and the steps under Steps/ bind them
+		to Freedom.Client over a server that keeps the plugin's rules.
+
+		It sits beside Freedom.Tests rather than replacing it. The xUnit suite
+		is where the edges live and what drives the coverage badge; this is
+		where the behaviour lives, in the words the README uses. It is a CI
+		gate and deliberately not counted in coverage, so the number keeps
+		meaning what it meant.
+
+		The fake server, the sealing transcription and the harness are linked
+		from Freedom.Tests rather than copied: nothing can reference a test
+		project, and two copies of the server's rules would drift.
+
+		Scenarios tagged @manual @ignore are on-device acceptance criteria —
+		the browser coming back to the app, ANDROID_ID across a reinstall —
+		that no test host can reach.
+	-->
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<RootNamespace>TheBleedingDeacons.Freedom.Specs</RootNamespace>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<OutputType>Exe</OutputType>
+		<IsPackable>false</IsPackable>
+		<IsTestProject>true</IsTestProject>
+		<TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+		<UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+		<!-- Reqnroll generates a .feature.cs behind every feature file, and
+		     generated code has no business failing a style rule. -->
+		<RunAnalyzers>false</RunAnalyzers>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Reqnroll.xunit.v3" Version="3.3.4" />
+		<PackageReference Include="Shouldly" Version="4.3.0" />
+		<PackageReference Include="xunit.v3" Version="3.2.2" />
+		<PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Using Include="Xunit" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Compile Include="..\TheBleedingDeacons.Freedom.Tests\Support\FakeFreedomServer.cs" Link="Support\Linked\FakeFreedomServer.cs" />
+		<Compile Include="..\TheBleedingDeacons.Freedom.Tests\Support\FakeBrowser.cs" Link="Support\Linked\FakeBrowser.cs" />
+		<Compile Include="..\TheBleedingDeacons.Freedom.Tests\Support\FixedDevice.cs" Link="Support\Linked\FixedDevice.cs" />
+		<Compile Include="..\TheBleedingDeacons.Freedom.Tests\Support\Harness.cs" Link="Support\Linked\Harness.cs" />
+		<Compile Include="..\TheBleedingDeacons.Freedom.Tests\Support\Sealing.cs" Link="Support\Linked\Sealing.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\TheBleedingDeacons.Freedom.Client\TheBleedingDeacons.Freedom.Client.csproj" />
+		<ProjectReference Include="..\TheBleedingDeacons.Freedom.Models\TheBleedingDeacons.Freedom.Models.csproj" />
+	</ItemGroup>
+
+</Project>

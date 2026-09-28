@@ -1,0 +1,106 @@
+name: Release
+
+# integrity-sharp's release, for two packages: a v* tag runs the gates, packs
+# Freedom.Client and Freedom.Client.Maui at the tag's version, pushes both to
+# GitHub Packages and attaches them to a GitHub Release. Cut a tag with
+# scripts/release.ps1.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read # enough for checkout; publishing does not use this token
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Derive version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::Tag '$GITHUB_REF_NAME' is not of the form v<major>.<minor>.<patch>[-prerelease]"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          case "$VERSION" in
+            *-*) echo "prerelease=true"  >> "$GITHUB_OUTPUT" ;;
+            *)   echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      # The org makes GITHUB_TOKEN read-only, so publishing needs a PAT. Checked
+      # up front so a missing or expired one fails in seconds, not after a build.
+      - name: Check publishing credentials
+        env:
+          PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+        run: |
+          if [ -z "$PACKAGES_TOKEN" ]; then
+            echo "::error::Secret PACKAGES_TOKEN is not set. Create a classic PAT with the 'repo' and 'write:packages' scopes and add it as a repository secret named PACKAGES_TOKEN."
+            exit 1
+          fi
+          code=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -u "${{ github.repository_owner }}:$PACKAGES_TOKEN" \
+            https://nuget.pkg.github.com/${{ github.repository_owner }}/download/freedom.client/index.json)
+          case "$code" in
+            200|404) echo "PACKAGES_TOKEN authenticates OK (HTTP $code)" ;;
+            401|403) echo "::error::PACKAGES_TOKEN was rejected (HTTP $code) — expired, revoked, or missing the write:packages scope."; exit 1 ;;
+            *) echo "::warning::Unexpected HTTP $code probing GitHub Packages; continuing and letting the push report the outcome." ;;
+          esac
+
+      - name: Setup Java
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install the MAUI Android workload
+        run: dotnet workload install maui-android
+
+      # The same gates as ci.yml: a tag on a commit whose gates fail publishes nothing.
+      - name: Build and test
+        run: |
+          dotnet build TheBleedingDeacons.Freedom.Tests/TheBleedingDeacons.Freedom.Tests.csproj --configuration Debug
+          dotnet build TheBleedingDeacons.Freedom.Specs/TheBleedingDeacons.Freedom.Specs.csproj --configuration Debug
+          dotnet TheBleedingDeacons.Freedom.Tests/bin/Debug/net10.0/TheBleedingDeacons.Freedom.Tests.dll
+          dotnet TheBleedingDeacons.Freedom.Specs/bin/Debug/net10.0/TheBleedingDeacons.Freedom.Specs.dll
+
+      - name: Pack
+        run: |
+          for project in TheBleedingDeacons.Freedom.Client TheBleedingDeacons.Freedom.Client.Maui; do
+            dotnet pack "$project/$project.csproj" \
+              --configuration Release \
+              -p:Version=${{ steps.version.outputs.version }} \
+              -p:ContinuousIntegrationBuild=true \
+              --output artifacts
+          done
+
+      - name: Push to GitHub Packages
+        run: >
+          dotnet nuget push "artifacts/*.nupkg"
+          --source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+          --api-key ${{ secrets.PACKAGES_TOKEN }}
+          --skip-duplicate
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+        run: >
+          gh release create "$GITHUB_REF_NAME"
+          artifacts/*.nupkg
+          --title "$GITHUB_REF_NAME"
+          --generate-notes
+          ${{ steps.version.outputs.prerelease == 'true' && '--prerelease' || '' }}
