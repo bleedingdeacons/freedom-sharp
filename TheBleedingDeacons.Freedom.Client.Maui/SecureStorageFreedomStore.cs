@@ -1,8 +1,8 @@
 // Copyright (c) The Bleeding Deacons. Licensed under the MIT license.
 
-using System.Text.Json;
 using Microsoft.Maui.Storage;
 using TheBleedingDeacons.Freedom.Client.Abstractions;
+using TheBleedingDeacons.Freedom.Client.Serialization;
 using TheBleedingDeacons.Freedom.Client.Stores;
 
 namespace TheBleedingDeacons.Freedom.Client.Maui;
@@ -30,19 +30,9 @@ public sealed class SecureStorageFreedomStore(string application) : IFreedomStor
 	{
 		try
 		{
-			var json = await SecureStorage.Default.GetAsync(_key).ConfigureAwait(false);
-			if (string.IsNullOrEmpty(json))
-			{
-				return FreedomSnapshot.Empty;
-			}
-
-			var stored = JsonSerializer.Deserialize<Stored>(json);
-
-			return stored is null
-				? FreedomSnapshot.Empty
-				: new FreedomSnapshot(stored.Values.ToDictionary(v => v.Key, StringComparer.Ordinal), stored.Etag, stored.VerifiedAt);
+			return FreedomStateJson.DeserializeSnapshot(await SecureStorage.Default.GetAsync(_key).ConfigureAwait(false));
 		}
-		catch (Exception e) when (e is JsonException or InvalidOperationException or Java.Lang.Exception)
+		catch (Exception e) when (e is InvalidOperationException or Java.Lang.Exception)
 		{
 			// Unreadable is treated as empty: the next sync fetches everything,
 			// which is the right answer to a store that has lost its contents.
@@ -88,7 +78,5 @@ public sealed class SecureStorageFreedomStore(string application) : IFreedomStor
 	}
 
 	private Task WriteAsync(FreedomSnapshot snapshot) =>
-		SecureStorage.Default.SetAsync(_key, JsonSerializer.Serialize(new Stored([.. snapshot.Values.Values], snapshot.Etag, snapshot.VerifiedAt)));
-
-	private sealed record Stored(List<FreedomValue> Values, string? Etag, DateTimeOffset? VerifiedAt);
+		SecureStorage.Default.SetAsync(_key, FreedomStateJson.Serialize(snapshot));
 }

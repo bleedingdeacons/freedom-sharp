@@ -78,7 +78,7 @@ public sealed class FreedomClient : IDisposable
 		// here: an app whose settings were left out of a build should start and
 		// say so on its setup screen, not crash on launch.
 		_api = options.IsConfigured
-			? new FreedomApi(options.BaseUrl, httpClient, _logger, options.AllowInsecureBaseUrl)
+			? new FreedomApi(options.BaseUrl, httpClient, _logger, options.AllowInsecureBaseUrl, userAgent: options.UserAgent ?? FreedomApi.DefaultUserAgent(options.Application))
 			: null;
 	}
 

@@ -89,7 +89,11 @@ public sealed class FakeFreedomServer : HttpMessageHandler
 		var at = absolute.IndexOf("/wp-json/freedom/v1/", StringComparison.Ordinal);
 		var path = at < 0 ? absolute : absolute[(at + "/wp-json/freedom/v1/".Length)..];
 		SitePath = at < 0 ? string.Empty : absolute[..at];
-		var ifNoneMatch = request.Headers.IfNoneMatch.FirstOrDefault()?.Tag.Trim('"');
+
+		// The plugin accepts the ETag from If-None-Match or ?etag=, as the
+		// client sends both; this answers to either, header first.
+		var ifNoneMatch = request.Headers.IfNoneMatch.FirstOrDefault()?.Tag.Trim('"')
+			?? System.Web.HttpUtility.ParseQueryString(request.RequestUri!.Query)["etag"];
 		Requests.Add((request.Method, path, body, ifNoneMatch));
 
 		if (Offline)

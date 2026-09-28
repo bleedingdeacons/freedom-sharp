@@ -3,6 +3,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Hosting;
 using TheBleedingDeacons.Freedom.Client.Abstractions;
 
@@ -37,6 +38,13 @@ public static class FreedomMauiExtensions
 
 		var services = builder.Services;
 
+		// The app's own name and version first, then the library's: the
+		// traffic is the app's, and "which build is this?" is the first
+		// question asked of a misbehaving tablet.
+		options = options.UserAgent is null
+			? options with { UserAgent = $"{AppInfo.Current.Name.Replace(' ', '-')}/{AppInfo.Current.VersionString} ({FreedomApi.DefaultUserAgent(options.Application)})" }
+			: options;
+
 		services.TryAddSingleton(options);
 		services.TryAddSingleton<IFreedomStore>(_ => new SecureStorageFreedomStore(options.Application));
 		services.TryAddSingleton<IFreedomCredentialStore>(_ => new SecureStorageCredentialStore(options.Application));
@@ -48,8 +56,18 @@ public static class FreedomMauiExtensions
 			sp.GetRequiredService<IFreedomCredentialStore>(),
 			sp.GetRequiredService<IFreedomSignIn>(),
 			sp.GetRequiredService<IDeviceIdentity>(),
-			logger: sp.GetService<ILogger<FreedomClient>>()));
+			NativeHttpClient(),
+			sp.GetService<ILogger<FreedomClient>>()));
 
 		return builder;
 	}
+
+	/// <summary>
+	/// Android's own HTTP stack rather than .NET's managed one, as Link uses:
+	/// the edge firewall in front of the suite's sites fingerprints the TLS
+	/// handshake, and the platform stack is the one the system browser uses.
+	/// One client for the process — Freedom asks once per start.
+	/// </summary>
+	private static HttpClient NativeHttpClient() =>
+		new(new Xamarin.Android.Net.AndroidMessageHandler(), disposeHandler: true) { Timeout = TimeSpan.FromSeconds(20) };
 }

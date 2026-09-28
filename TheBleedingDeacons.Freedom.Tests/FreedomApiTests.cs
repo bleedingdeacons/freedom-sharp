@@ -55,6 +55,19 @@ public sealed class FreedomApiTests
 	}
 
 	[Fact]
+	public async Task TheEtagAlsoTravelsInTheQueryForProxiesThatDropTheHeader()
+	{
+		var handler = new SequenceHandler(HttpStatusCode.OK) { Body = "{}" };
+		using var api = new FreedomApi(new Uri(FakeFreedomServer.BaseUrl), new HttpClient(handler), retryDelay: TimeSpan.Zero);
+
+		await api.GetManifestAsync("t", "abc123", Ct);
+		Assert.EndsWith("config/manifest?etag=abc123", handler.LastUri!.ToString(), StringComparison.Ordinal);
+
+		await api.GetManifestAsync("t", null, Ct);
+		Assert.EndsWith("config/manifest", handler.LastUri!.ToString(), StringComparison.Ordinal);
+	}
+
+	[Fact]
 	public async Task AReadIsRetriedOnAServerErrorAndAWriteIsNot()
 	{
 		var handler = new SequenceHandler(HttpStatusCode.ServiceUnavailable, HttpStatusCode.ServiceUnavailable, HttpStatusCode.ServiceUnavailable);
@@ -109,14 +122,41 @@ public sealed class FreedomApiTests
 	}
 
 	[Fact]
-	public async Task AFirewallsHtmlPageIsReportedAsWhatItIs()
+	public async Task AFirewallsHtmlPageIsRetriedAndThenReportedAsWhatItIs()
 	{
 		var handler = new SequenceHandler(HttpStatusCode.Forbidden) { Body = "<html>Blocked</html>", MediaType = "text/html" };
 		using var api = new FreedomApi(new Uri(FakeFreedomServer.BaseUrl), new HttpClient(handler), retryDelay: TimeSpan.Zero);
 
 		var response = await api.GetManifestAsync("t", null, Ct);
 
+		Assert.Equal(3, handler.Calls);
 		Assert.Equal("http_403", response.Error!.Code);
+	}
+
+	[Fact]
+	public async Task AFirewallRefusingTheFirstHandshakeIsNotAnError()
+	{
+		// SiteGround refuses the first TLS handshake .NET's managed handler
+		// makes in a process; the retry resumes the session and gets through.
+		// Writes too: the request never reached WordPress, so nothing was spent.
+		var handler = new SequenceHandler(HttpStatusCode.Forbidden, HttpStatusCode.OK) { Body = "<html>Blocked</html>", MediaType = "text/html" };
+		using var api = new FreedomApi(new Uri(FakeFreedomServer.BaseUrl), new HttpClient(handler), retryDelay: TimeSpan.Zero);
+
+		var response = await api.SignOutAsync("t", Ct);
+
+		Assert.Equal(2, handler.Calls);
+		Assert.True(response.Success);
+	}
+
+	[Fact]
+	public async Task ThePluginsOwnRefusalIsNeverRetried()
+	{
+		using var server = new FakeFreedomServer();
+		using var api = Api(server);
+
+		await api.GetManifestAsync("frt_invented", null, Ct);
+
+		Assert.Single(server.Requests);
 	}
 
 	[Fact]
@@ -144,6 +184,44 @@ public sealed class FreedomApiTests
 		Assert.DoesNotContain("smtp.password", handler.LastUri.ToString(), StringComparison.Ordinal);
 	}
 
+	[Fact]
+	public async Task EveryRequestSaysWhatItIs()
+	{
+		// SiteGround's firewall answers a .NET request with no User-Agent with
+		// a bare 403 page; .NET sends none of its own.
+		var handler = new SequenceHandler(HttpStatusCode.OK) { Body = "{}" };
+		using var api = new FreedomApi(new Uri(FakeFreedomServer.BaseUrl), new HttpClient(handler), retryDelay: TimeSpan.Zero);
+
+		await api.GetManifestAsync("t", null, Ct);
+
+		Assert.StartsWith("Freedom.Client/", handler.LastUserAgent, StringComparison.Ordinal);
+		Assert.Contains("github.com/bleedingdeacons/freedom-sharp", handler.LastUserAgent, StringComparison.Ordinal);
+	}
+
+	[Fact]
+	public async Task AnAppsOwnUserAgentIsUsed()
+	{
+		var given = new SequenceHandler(HttpStatusCode.OK) { Body = "{}" };
+		using var api = new FreedomApi(new Uri(FakeFreedomServer.BaseUrl), new HttpClient(given), retryDelay: TimeSpan.Zero, userAgent: "Register/1.3.0 (Android)");
+		await api.GetManifestAsync("t", null, Ct);
+
+		var shared = new SequenceHandler(HttpStatusCode.OK) { Body = "{}" };
+		using var client = new HttpClient(shared);
+		client.DefaultRequestHeaders.UserAgent.ParseAdd("Link/1.7.0");
+		using var api2 = new FreedomApi(new Uri(FakeFreedomServer.BaseUrl), client, retryDelay: TimeSpan.Zero);
+		await api2.GetManifestAsync("t", null, Ct);
+
+		Assert.Equal("Register/1.3.0 (Android)", given.LastUserAgent);
+		Assert.Equal("Link/1.7.0", shared.LastUserAgent);
+	}
+
+	[Fact]
+	public void TheDefaultNamesTheApplication()
+	{
+		Assert.Contains("(register; ", FreedomApi.DefaultUserAgent("register"), StringComparison.Ordinal);
+		Assert.DoesNotContain("+", FreedomApi.DefaultUserAgent(null).Split(' ')[0], StringComparison.Ordinal);
+	}
+
 	private static FreedomApi Api(FakeFreedomServer server, string baseUrl = FakeFreedomServer.BaseUrl) =>
 		new(new Uri(baseUrl), new HttpClient(server, disposeHandler: false), retryDelay: TimeSpan.Zero);
 
@@ -168,16 +246,21 @@ public sealed class FreedomApiTests
 
 		public Uri? LastUri { get; private set; }
 
+		public string? LastUserAgent { get; private set; }
+
 		protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
 		{
 			LastAuthorization = request.Headers.Authorization?.ToString();
 			LastUri = request.RequestUri;
+			LastUserAgent = request.Headers.UserAgent.ToString();
 			var status = statuses[Math.Min(Calls, statuses.Length - 1)];
 			Calls++;
 
 			return Task.FromResult(new HttpResponseMessage(status)
 			{
-				Content = new StringContent(status == HttpStatusCode.OK && Body.StartsWith("{\"code\"", StringComparison.Ordinal) ? "{}" : Body, System.Text.Encoding.UTF8, MediaType),
+				Content = status == HttpStatusCode.OK && MediaType.Contains("html", StringComparison.Ordinal)
+					? new StringContent("{}", System.Text.Encoding.UTF8, "application/json")
+					: new StringContent(status == HttpStatusCode.OK && Body.StartsWith("{\"code\"", StringComparison.Ordinal) ? "{}" : Body, System.Text.Encoding.UTF8, MediaType),
 			});
 		}
 	}
