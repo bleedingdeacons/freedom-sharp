@@ -32,7 +32,7 @@ public sealed class SecureStorageFreedomStore(string application) : IFreedomStor
 		{
 			return FreedomStateJson.DeserializeSnapshot(await SecureStorage.Default.GetAsync(_key).ConfigureAwait(false));
 		}
-		catch (Exception e) when (e is InvalidOperationException or Java.Lang.Exception)
+		catch (Exception e) when (StoreFailures.IsUnreadable(e))
 		{
 			// Unreadable is treated as empty: the next sync fetches everything,
 			// which is the right answer to a store that has lost its contents.

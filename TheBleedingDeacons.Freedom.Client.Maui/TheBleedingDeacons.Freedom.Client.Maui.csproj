@@ -3,18 +3,24 @@
   <!--
     The MAUI half of Freedom: working defaults for every seam Freedom.Client
     leaves open, so an Android app needs nothing but options and a callback
-    activity. Android only for now — the device identity is ANDROID_ID, and
-    what an iOS or Windows device should be identified by is still an open
-    question (see the README's "What is not done").
+    activity.
+
+    Two builds. net10.0-android has everything, the ANDROID_ID device identity
+    and Android's own HTTP stack included. net10.0 serves every other head —
+    iOS, Mac Catalyst, Windows — because MAUI's own packages ship a plain
+    net10.0 build beside the platform ones and an app resolves the right one
+    per head. There it has the SecureStorage stores, WebAuthenticator and
+    UseFreedom, but no device identity: what an iOS or Windows device should
+    be identified by is still open (see "What is not done"). That is enough
+    for a session handover, which is how Link signs in, and not for a
+    browser sign-in, which says so rather than failing obscurely.
   -->
 
   <PropertyGroup>
-    <TargetFramework>net10.0-android</TargetFramework>
-    <UseMaui>true</UseMaui>
-    <SingleProject>true</SingleProject>
+    <TargetFrameworks>net10.0;net10.0-android</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <SupportedOSPlatformVersion>24.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="'$(TargetFramework)' == 'net10.0-android'">24.0</SupportedOSPlatformVersion>
 
     <PackageId>Freedom.Client.Maui</PackageId>
     <Version>0.1.1</Version>
@@ -37,6 +43,12 @@
 
   <ItemGroup>
     <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!-- Android's own code, only in Android's build. -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-android'">
+    <Compile Remove="Platforms\Android\**" />
+    <None Include="Platforms\Android\**" />
   </ItemGroup>
 
   <ItemGroup>
