@@ -49,13 +49,18 @@ public static class FreedomMauiExtensions
 		services.TryAddSingleton<IFreedomStore>(_ => new SecureStorageFreedomStore(options.Application));
 		services.TryAddSingleton<IFreedomCredentialStore>(_ => new SecureStorageCredentialStore(options.Application));
 		services.TryAddSingleton<IFreedomSignIn, WebAuthenticatorSignIn>();
+#if ANDROID
 		services.TryAddSingleton<IDeviceIdentity, AndroidDeviceIdentity>();
+#endif
+
+		// No device identity off Android unless the app registered one: a
+		// session handover needs none, and a browser sign-in says it needs one.
 		services.TryAddSingleton(sp => new FreedomClient(
 			sp.GetRequiredService<FreedomOptions>(),
 			sp.GetRequiredService<IFreedomStore>(),
 			sp.GetRequiredService<IFreedomCredentialStore>(),
 			sp.GetRequiredService<IFreedomSignIn>(),
-			sp.GetRequiredService<IDeviceIdentity>(),
+			sp.GetService<IDeviceIdentity>(),
 			NativeHttpClient(),
 			sp.GetService<ILogger<FreedomClient>>()));
 
@@ -63,11 +68,18 @@ public static class FreedomMauiExtensions
 	}
 
 	/// <summary>
-	/// Android's own HTTP stack rather than .NET's managed one, as Link uses:
-	/// the edge firewall in front of the suite's sites fingerprints the TLS
-	/// handshake, and the platform stack is the one the system browser uses.
-	/// One client for the process — Freedom asks once per start.
+	/// On Android, Android's own HTTP stack rather than .NET's managed one, as
+	/// Link uses: the edge firewall in front of the suite's sites fingerprints
+	/// the TLS handshake, and the platform stack is the one the system browser
+	/// uses. Elsewhere the managed stack, whose first-handshake refusal
+	/// FreedomApi already retries past. An app that wants its own platform
+	/// stack constructs FreedomClient itself. One client for the process —
+	/// Freedom asks once per start.
 	/// </summary>
 	private static HttpClient NativeHttpClient() =>
+#if ANDROID
 		new(new Xamarin.Android.Net.AndroidMessageHandler(), disposeHandler: true) { Timeout = TimeSpan.FromSeconds(20) };
+#else
+		new() { Timeout = TimeSpan.FromSeconds(20) };
+#endif
 }

@@ -30,7 +30,7 @@ public sealed class SecureStorageCredentialStore(string application) : IFreedomC
 		{
 			return FreedomStateJson.DeserializeCredentials(await SecureStorage.Default.GetAsync(_key).ConfigureAwait(false));
 		}
-		catch (Exception e) when (e is InvalidOperationException or Java.Lang.Exception)
+		catch (Exception e) when (StoreFailures.IsUnreadable(e))
 		{
 			return null;
 		}

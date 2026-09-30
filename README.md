@@ -361,7 +361,7 @@ reads each code is in the table under "Offline is normal".
 | --- | --- | --- |
 | `TheBleedingDeacons.Freedom.Client` | net10.0 | Package **Freedom.Client**: `FreedomClient`, `FreedomApi`, the envelope, the seams |
 | `TheBleedingDeacons.Freedom.Models` | net10.0 | The wire types; ships inside Freedom.Client |
-| `TheBleedingDeacons.Freedom.Client.Maui` | net10.0-android | Package **Freedom.Client.Maui**: the defaults and `UseFreedom` |
+| `TheBleedingDeacons.Freedom.Client.Maui` | net10.0; net10.0-android | Package **Freedom.Client.Maui**: the defaults and `UseFreedom`. The net10.0 build serves iOS, Mac Catalyst and Windows, without a device identity. |
 | `TheBleedingDeacons.Freedom.Tests` | net10.0 | xUnit v3: the edges, the envelope, the wire. Drives the coverage badge. |
 | `TheBleedingDeacons.Freedom.Specs` | net10.0 | Reqnroll: the behaviour, in the words of this README. A CI gate, not in coverage. |
 | `example/Freedom-cli` | net10.0 | The standalone proof |
@@ -377,11 +377,13 @@ rather than copying it.
 - **Keys in the hardware keystore.** Android Keystore RSA with
   OAEP-SHA-1, behind `IFreedomCredentialStore`, is the next step. It is
   the same gap Link has.
-- **iOS and Windows.** There is no `ANDROID_ID` on either, and
-  WebAuthenticator does not work in an unpackaged Windows app. Register's
-  Windows head would need a loopback sign-in and a generated install id,
-  under which a reinstall is a new tablet. The seams are there; the
-  defaults are not.
+- **A device identity on iOS and Windows.** There is no `ANDROID_ID` on
+  either, and WebAuthenticator does not work in an unpackaged Windows app.
+  From 0.2.0 the package has a build for those heads, with the stores and
+  `UseFreedom`, which is enough for a session handover — how Link signs
+  in, on iOS as on Android — but a browser sign-in there says it needs a
+  device identity. Register's Windows head would need a loopback sign-in
+  and a generated install id, under which a reinstall is a new tablet.
 - **Removing the callback activity.** The library could ship it with a
   `${applicationId}.freedom` scheme, if .NET Android substitutes manifest
   placeholders in attribute-generated intent filters. That has not been
