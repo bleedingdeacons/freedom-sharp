@@ -54,6 +54,14 @@ public sealed class FakeFreedomServer : HttpMessageHandler
 	/// <summary>A status to answer every values request with.</summary>
 	public HttpStatusCode? ValuesStatus { get; set; }
 
+	/// <summary>
+	/// Something to throw for every values request instead of answering — the
+	/// connection dropping between the manifest and the values, as when the app
+	/// is backgrounded mid-sync. <see cref="ConnectionAborted"/> is what
+	/// Android's handler throws.
+	/// </summary>
+	public Exception? ValuesFailure { get; set; }
+
 	/// <summary>A refusal to send the browser back with instead of a code.</summary>
 	public string? BrowserRefusal { get; set; }
 
@@ -101,6 +109,11 @@ public sealed class FakeFreedomServer : HttpMessageHandler
 			throw new HttpRequestException("No route to host");
 		}
 
+		if (ValuesFailure is not null && string.Equals(path, "config/values", StringComparison.Ordinal))
+		{
+			throw ValuesFailure;
+		}
+
 		var bearer = request.Headers.Authorization?.Parameter;
 
 		return path switch
@@ -115,6 +128,14 @@ public sealed class FakeFreedomServer : HttpMessageHandler
 			_ => Error(HttpStatusCode.NotFound, "rest_no_route", "No route was found matching the URL and request method."),
 		};
 	}
+
+	/// <summary>
+	/// A dropped connection as <c>Xamarin.Android.Net.AndroidMessageHandler</c>
+	/// reports it: a <see cref="WebException"/>, not an <see cref="HttpRequestException"/>,
+	/// around <c>Java.Net.SocketException</c>, which is an <see cref="IOException"/>.
+	/// </summary>
+	public static WebException ConnectionAborted() =>
+		new("Software caused connection abort", new IOException("Software caused connection abort"), WebExceptionStatus.ConnectionClosed, null);
 
 	/// <summary>Where the fake browser should come back to after <c>auth/start</c>.</summary>
 	public string BrowserOutcome() => BrowserRefusal is null ? "code=" + Code : "error=" + BrowserRefusal;

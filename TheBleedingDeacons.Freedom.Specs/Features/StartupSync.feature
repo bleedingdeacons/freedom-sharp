@@ -68,7 +68,8 @@ Feature: Every start
       And the value of "smtp.host" changes to "smtp.example.org"
       And the server answers every values request with 500
       When the app starts
-      Then the device holds "smtp.host" as "mail.example.org"
+      Then the start reports ServerError
+      And the device holds "smtp.host" as "mail.example.org"
       And the configuration is not marked current at the new manifest
 
     Scenario: The next start repairs it

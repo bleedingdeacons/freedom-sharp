@@ -245,6 +245,84 @@ public sealed class FreedomClientTests : IDisposable
 	}
 
 	[Fact]
+	public async Task AConnectionDroppedMidSyncIsOfflineAndChangesNothing()
+	{
+		// Register, 2026-10-04: backgrounded between the manifest and the
+		// values, Android's handler threw WebException and the sync threw
+		// rather than reporting Offline.
+		_h.Server.Set("a", "1");
+		_h.Server.Set("gone", "x");
+		await _h.SignInAsync();
+		var before = await _h.Store.LoadAsync(default);
+		_h.Changes.Clear();
+		_h.Server.Set("a", "2");
+		_h.Server.Remove("gone");
+		_h.Server.ValuesFailure = FakeFreedomServer.ConnectionAborted();
+
+		var result = await _h.StartAsync();
+
+		Assert.Equal(SyncStatus.Offline, result.Status);
+		Assert.Empty(result.Updated);
+		Assert.Empty(result.Removed);
+		Assert.Equal(before.VerifiedAt, result.VerifiedAt);
+
+		// Not even the removal the manifest asked for: the store is exactly what
+		// its ETag describes, so the next start finds a manifest that differs.
+		var after = await _h.Store.LoadAsync(default);
+		Assert.Equal(before.Etag, after.Etag);
+		Assert.Equal(before.VerifiedAt, after.VerifiedAt);
+		Assert.Equal(before.Values.Values.OrderBy(v => v.Key, StringComparer.Ordinal), after.Values.Values.OrderBy(v => v.Key, StringComparer.Ordinal));
+		Assert.Empty(_h.Changes);
+
+		_h.Server.ValuesFailure = null;
+		var next = await _h.StartAsync();
+
+		Assert.Equal(SyncStatus.Updated, next.Status);
+		Assert.Equal("2", _h.Client.Get("a"));
+		Assert.Null(_h.Client.Get("gone"));
+	}
+
+	[Fact]
+	public async Task AFailedBatchDiscardsTheBatchesBeforeIt()
+	{
+		// More than one values request: the first answers, the second never
+		// does. Nothing is applied — not half the keys at their new versions.
+		for (var i = 0; i < 150; i++)
+		{
+			_h.Server.Set($"k{i:D3}", "1");
+		}
+
+		await _h.SignInAsync();
+		for (var i = 0; i < 150; i++)
+		{
+			_h.Server.Set($"k{i:D3}", "2");
+		}
+
+		using var dropping = new DropsValuesAfterTheFirst(_h.Server);
+		using var client = new FreedomClient(_h.Options, _h.Store, _h.Credentials, httpClient: new HttpClient(dropping, disposeHandler: false));
+
+		var result = await client.SyncAsync(TestContext.Current.CancellationToken);
+
+		Assert.Equal(SyncStatus.Offline, result.Status);
+		Assert.Equal(1 + 3, dropping.ValuesRequests); // the first, then the second and its two retries
+		Assert.All((await _h.Store.LoadAsync(default)).Values.Values, v => Assert.Equal("1", v.Value));
+	}
+
+	[Fact]
+	public async Task AValuesRequestAnsweredWithAnErrorIsAServerError()
+	{
+		_h.Server.Set("a", "1");
+		await _h.SignInAsync();
+		_h.Server.Set("a", "2");
+		_h.Server.ValuesStatus = HttpStatusCode.ServiceUnavailable;
+
+		var result = await _h.StartAsync();
+
+		Assert.Equal(SyncStatus.ServerError, result.Status);
+		Assert.Equal("1", _h.Client.Get("a"));
+	}
+
+	[Fact]
 	public async Task APartialSyncForgetsTheEtagSoTheNextStartChecksEverything()
 	{
 		_h.Server.Set("a", "1");
@@ -394,5 +472,33 @@ public sealed class FreedomClientTests : IDisposable
 
 		Assert.Equal("mail", fresh.Get("smtp.host"));
 		Assert.Equal(1, _h.Server.Requests.Count(r => string.Equals(r.Path, "config/manifest", StringComparison.Ordinal)));
+	}
+
+	/// <summary>Passes everything to the server, except that every values request after the first drops as Android's handler reports it.</summary>
+	private sealed class DropsValuesAfterTheFirst(FakeFreedomServer server) : HttpMessageHandler
+	{
+		private readonly HttpMessageInvoker _server = new(server, disposeHandler: false);
+
+		public int ValuesRequests { get; private set; }
+
+		protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+		{
+			if (request.RequestUri!.AbsolutePath.EndsWith("/config/values", StringComparison.Ordinal) && ++ValuesRequests >= 2)
+			{
+				throw FakeFreedomServer.ConnectionAborted();
+			}
+
+			return _server.SendAsync(request, cancellationToken);
+		}
+
+		protected override void Dispose(bool disposing)
+		{
+			if (disposing)
+			{
+				_server.Dispose();
+			}
+
+			base.Dispose(disposing);
+		}
 	}
 }

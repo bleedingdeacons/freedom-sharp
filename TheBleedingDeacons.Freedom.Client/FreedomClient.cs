@@ -25,7 +25,9 @@ namespace TheBleedingDeacons.Freedom.Client;
 /// is off.</para>
 /// <para><b>The ETag is saved last</b>, and only when every stale key was
 /// applied, so a sync interrupted part-way is repaired by the next start
-/// rather than mistaken for current.</para>
+/// rather than mistaken for current. A values request that gets no answer or
+/// an error applies nothing at all, and is reported as the manifest request
+/// would have been.</para>
 /// <para>Calls are serialised: two overlapping syncs, or a sync overlapping a
 /// sign-in, run one after the other.</para>
 /// </remarks>
@@ -338,10 +340,14 @@ public sealed class FreedomClient : IDisposable
 
 			if (!response.Success || response.Data is null)
 			{
-				// Keep what the other batches brought; the ETag stays unsaved,
-				// so the next start asks again.
-				complete = false;
-				continue;
+				// No answer, or an error: abandon the whole sync, including
+				// what earlier batches brought and the removals. The store is
+				// left exactly as its ETag describes it, and the next start
+				// sees a manifest that differs and fetches everything stale
+				// again. A connection dropping as the app is backgrounded is
+				// the usual cause, and the start reports Offline, as it would
+				// had the manifest request been the one to fail.
+				return await RefusedOrKeptAsync(response, snapshot, cancellationToken).ConfigureAwait(false);
 			}
 
 			if (response.Data.Missing.Count > 0 || response.Data.Unreadable.Count > 0)
@@ -400,30 +406,31 @@ public sealed class FreedomClient : IDisposable
 		return new SyncResult(status, updatedKeys, removed, [], now, complete ? "Configuration is current." : "Configuration was partly updated; the rest follows at the next start.");
 	}
 
-	private async Task<SyncResult> RefusedOrKeptAsync(ApiResponse<Manifest> manifest, FreedomSnapshot snapshot, CancellationToken cancellationToken)
+	private async Task<SyncResult> RefusedOrKeptAsync<T>(ApiResponse<T> response, FreedomSnapshot snapshot, CancellationToken cancellationToken)
+		where T : class
 	{
-		var code = manifest.Error?.Code ?? string.Empty;
+		var code = response.Error?.Code ?? string.Empty;
 
-		if (manifest.Unreachable)
+		if (response.Unreachable)
 		{
 			return SyncResult.Nothing(SyncStatus.Offline, snapshot.VerifiedAt, "The server could not be reached; keeping the configuration held.");
 		}
 
-		if (manifest.StatusCode == HttpStatusCode.Unauthorized)
+		if (response.StatusCode == HttpStatusCode.Unauthorized)
 		{
 			await ClearOnRefusalAsync(cancellationToken).ConfigureAwait(false);
 			return SyncResult.Nothing(SyncStatus.Revoked, snapshot.VerifiedAt, "This device is no longer signed in.");
 		}
 
-		if (manifest.StatusCode == HttpStatusCode.Forbidden && string.Equals(code, "freedom_application_disabled", StringComparison.Ordinal))
+		if (response.StatusCode == HttpStatusCode.Forbidden && string.Equals(code, "freedom_application_disabled", StringComparison.Ordinal))
 		{
-			return SyncResult.Nothing(SyncStatus.Suspended, snapshot.VerifiedAt, manifest.Error?.Message ?? "The application is not currently available.");
+			return SyncResult.Nothing(SyncStatus.Suspended, snapshot.VerifiedAt, response.Error?.Message ?? "The application is not currently available.");
 		}
 
-		if (manifest.StatusCode == HttpStatusCode.Forbidden && code is "freedom_not_authorised" or "freedom_tablet_blocked")
+		if (response.StatusCode == HttpStatusCode.Forbidden && code is "freedom_not_authorised" or "freedom_tablet_blocked")
 		{
 			await ClearOnRefusalAsync(cancellationToken).ConfigureAwait(false);
-			return SyncResult.Nothing(SyncStatus.NotAuthorised, snapshot.VerifiedAt, manifest.Error?.Message ?? "This device may no longer use the application.");
+			return SyncResult.Nothing(SyncStatus.NotAuthorised, snapshot.VerifiedAt, response.Error?.Message ?? "This device may no longer use the application.");
 		}
 
 		// Anything else — a 5xx, a 429, a 403 from a firewall, an answer that

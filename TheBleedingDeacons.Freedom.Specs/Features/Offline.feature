@@ -18,6 +18,40 @@ Feature: Starting without the server
       And the device holds "smtp.host" as "mail.example.org"
       And the device knows how old its configuration is
 
+  Rule: A connection lost part-way through a start changes nothing
+
+    The manifest arrives, and the connection drops before the values do —
+    typically because the app was sent to the background. Seen on the
+    Register tablet on 2026-10-04, where Android reported it in a way the
+    client did not recognise and the start threw instead.
+
+    Scenario: The connection drops while the values are fetched
+      Given the application has "smtp.host" set to "mail.example.org"
+      And the application has "legacy.flag" set to "on"
+      And the device has signed in
+      And the value of "smtp.host" changes to "smtp.example.org"
+      And "legacy.flag" is removed from the application
+      And the connection drops during every values request
+      When the app starts
+      Then the start reports Offline
+      And the device holds "smtp.host" as "mail.example.org"
+      And the device holds "legacy.flag" as "on"
+      And the configuration is not marked current at the new manifest
+
+    Scenario: The next start finishes the job
+      Given the application has "smtp.host" set to "mail.example.org"
+      And the application has "legacy.flag" set to "on"
+      And the device has signed in
+      And the value of "smtp.host" changes to "smtp.example.org"
+      And "legacy.flag" is removed from the application
+      And the connection drops during every values request
+      And the app has started
+      And the server answers values requests normally again
+      When the app starts
+      Then the start reports Updated
+      And the device holds "smtp.host" as "smtp.example.org"
+      And the device does not hold "legacy.flag"
+
   Rule: A server error is not a refusal
 
     Scenario Outline: The site is unwell
