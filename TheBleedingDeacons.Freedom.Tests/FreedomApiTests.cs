@@ -108,6 +108,40 @@ public sealed class FreedomApiTests
 		Assert.Equal(3, server.Requests.Count);
 	}
 
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public async Task AConnectionDroppedAsAndroidReportsItIsUnreachableNotAnException(bool asAndroid)
+	{
+		// AndroidMessageHandler throws WebException, not HttpRequestException,
+		// when the connection drops — as it does when the app is backgrounded
+		// mid-request. Seen on the Register tablet 2026-10-04, escaping a sync.
+		Exception thrown = asAndroid ? FakeFreedomServer.ConnectionAborted() : new IOException("Broken pipe");
+		var handler = new ThrowingHandler(thrown);
+		using var api = new FreedomApi(new Uri(FakeFreedomServer.BaseUrl), new HttpClient(handler), retryDelay: TimeSpan.Zero);
+
+		var read = await api.GetValuesAsync("t", ["smtp.host"], Ct);
+		Assert.True(read.Unreachable);
+		Assert.False(read.Success);
+		Assert.Equal(3, handler.Calls);
+
+		handler.Calls = 0;
+		var write = await api.ReportKeyFaultAsync("t", Ct);
+		Assert.True(write.Unreachable);
+		Assert.Equal(1, handler.Calls);
+	}
+
+	[Fact]
+	public async Task ACallersOwnCancellationIsNotMistakenForNoNetwork()
+	{
+		using var cancelled = new CancellationTokenSource();
+		await cancelled.CancelAsync();
+		var handler = new ThrowingHandler(new TaskCanceledException());
+		using var api = new FreedomApi(new Uri(FakeFreedomServer.BaseUrl), new HttpClient(handler), retryDelay: TimeSpan.Zero);
+
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => api.GetManifestAsync("t", null, cancelled.Token));
+	}
+
 	[Fact]
 	public async Task AnErrorComesBackInTheServersWords()
 	{
@@ -232,6 +266,18 @@ public sealed class FreedomApiTests
 		var enrolled = await api.ExchangeAsync("register", FakeFreedomServer.Code, verifier, new("9774d56d682e549c", "android", "t", "m", "1"), TheBleedingDeacons.Freedom.Client.Crypto.TabletKeyPair.Generate().PublicKey, Ct);
 
 		return enrolled.Data!.Token;
+	}
+
+	private sealed class ThrowingHandler(Exception exception) : HttpMessageHandler
+	{
+		public int Calls { get; set; }
+
+		protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+		{
+			Calls++;
+
+			throw exception;
+		}
 	}
 
 	private sealed class SequenceHandler(params HttpStatusCode[] statuses) : HttpMessageHandler

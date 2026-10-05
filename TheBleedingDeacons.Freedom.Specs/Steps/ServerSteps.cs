@@ -5,6 +5,7 @@ using System.Net;
 using Reqnroll;
 using TheBleedingDeacons.Freedom.Client.Crypto;
 using TheBleedingDeacons.Freedom.Specs.Support;
+using TheBleedingDeacons.Freedom.Tests.Support;
 
 namespace TheBleedingDeacons.Freedom.Specs.Steps;
 
@@ -35,7 +36,14 @@ public sealed class ServerSteps(World world)
 	public void ValuesStatus(int status) => world.Server.ValuesStatus = (HttpStatusCode)status;
 
 	[Given(@"^the server answers values requests normally again$")]
-	public void ValuesNormal() => world.Server.ValuesStatus = null;
+	public void ValuesNormal()
+	{
+		world.Server.ValuesStatus = null;
+		world.Server.ValuesFailure = null;
+	}
+
+	[Given(@"^the connection drops during every values request$")]
+	public void ValuesDropped() => world.Server.ValuesFailure = FakeFreedomServer.ConnectionAborted();
 
 	[Given(@"^the server will refuse the sign-in in the browser with ""(.+)""$")]
 	public void BrowserRefusal(string error) => world.Server.BrowserRefusal = error;

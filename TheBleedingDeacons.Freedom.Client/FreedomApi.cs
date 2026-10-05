@@ -257,7 +257,7 @@ public sealed class FreedomApi : IDisposable
 			{
 				response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
 			}
-			catch (Exception e) when (e is HttpRequestException || (e is TaskCanceledException && !cancellationToken.IsCancellationRequested))
+			catch (Exception e) when (IsTransportFailure(e, cancellationToken))
 			{
 				_logger.LogWarning("Freedom: {Method} {Path} could not reach the server ({Reason})", request.Method, request.RequestUri?.AbsolutePath, e.GetType().Name);
 
@@ -315,6 +315,20 @@ public sealed class FreedomApi : IDisposable
 			}
 		}
 	}
+
+	/// <summary>
+	/// Whether an exception from the handler means no answer came back, as
+	/// opposed to a bug. The managed handler reports a dropped connection as
+	/// <see cref="HttpRequestException"/>; Android's <c>AndroidMessageHandler</c>
+	/// reports it as <see cref="WebException"/> (inner
+	/// <c>Java.Net.SocketException: Software caused connection abort</c>, seen
+	/// 2026-10-04 when Register was backgrounded mid-sync), and other handlers
+	/// let a bare <see cref="IOException"/> through. A timeout is a
+	/// <see cref="TaskCanceledException"/> the caller did not ask for.
+	/// </summary>
+	private static bool IsTransportFailure(Exception e, CancellationToken cancellationToken) =>
+		e is HttpRequestException or WebException or IOException
+		|| (e is TaskCanceledException && !cancellationToken.IsCancellationRequested);
 
 	/// <summary>
 	/// Whether a 403 is a web server's or firewall's page rather than the

@@ -193,6 +193,9 @@ await freedom.EnrolAsync(FreedomProof.ExistingSession(fellowshipDeviceToken));
    whose secret flag changed. **Removed keys** are those held but not
    listed.
 4. **Fetch the stale keys**, up to 100 per request.
+   - A request that gets no answer or an error **abandons the start**:
+     nothing is applied, not even earlier batches or removals, and it is
+     reported exactly as the manifest request would have been.
    - Plain values come as they are.
    - Secrets are opened with the private key. A secret whose inner key or
      version is not the one it arrived under is refused.
@@ -221,11 +224,22 @@ That is what makes overrides work with no bookkeeping on the device:
 
 ### The ETag is saved last
 
-A sync interrupted part-way (a batch that failed, a secret that would not
-open, a value that changed again mid-sync) leaves the ETag unsaved. The
-next start therefore sees a manifest that differs and repairs it. A store
-whose contents still exactly match an older ETag keeps that one, which is
-harmless.
+A sync interrupted part-way (a secret that would not open, a value that
+changed again mid-sync) leaves the ETag unsaved. The next start therefore
+sees a manifest that differs and repairs it. A store whose contents still
+exactly match an older ETag keeps that one, which is harmless.
+
+**A values request that fails changes nothing at all.** The usual cause is
+the app going to the background between the manifest and the values, and
+the connection dropping under it. The store is left exactly as its ETag
+describes it, and the start reports `Offline` (or `ServerError`, for an
+error status), as it would had the manifest request been the one to fail.
+
+Android's `AndroidMessageHandler` reports a dropped connection as a
+`WebException` (inner `Java.Net.SocketException`), not the
+`HttpRequestException` the managed handler throws. Both, and a bare
+`IOException`, are read as no answer. Until 2026-10-04 the `WebException`
+was not, and escaped `SyncAsync` on the Register tablet.
 
 ## Offline is normal
 
@@ -241,6 +255,9 @@ A tablet in a church hall with no signal starts with what it has.
 | gets `403 freedom_application_disabled` | `Suspended` | **kept** |
 | gets `401` | `Revoked` | cleared |
 | gets `403 freedom_not_authorised` / `freedom_tablet_blocked` | `NotAuthorised` | cleared |
+
+A values request, after a manifest that did arrive, is read by the same
+table.
 
 Reads retry twice on a network error, a 5xx or a 429, half a second apart.
 That is deliberately few: a start that waits half a minute on a server
